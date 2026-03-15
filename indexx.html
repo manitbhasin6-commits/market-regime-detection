@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Market Regime Detection Engine</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0a; --bg2: #111; --bg3: #181818;
+    --border: rgba(255,255,255,0.07); --border-b: rgba(255,255,255,0.15);
+    --text: #e8e6e0; --muted: #6b6a65; --accent: #b5f542;
+    --mono: 'JetBrains Mono', monospace; --sans: 'Syne', sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 13px; line-height: 1.7; min-height: 100vh; }
+  body::after { content: ''; position: fixed; inset: 0; background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.025) 2px, rgba(0,0,0,0.025) 4px); pointer-events: none; z-index: 9990; }
+
+  header { padding: 28px 40px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+  .h-title { font-family: var(--sans); font-size: 18px; font-weight: 800; letter-spacing: -0.5px; }
+  .h-title span { color: var(--accent); }
+  .h-meta { font-size: 11px; color: var(--muted); }
+  .h-meta b { color: var(--text); font-weight: 500; }
+
+  main { max-width: 1100px; margin: 0 auto; padding: 40px; }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 28px; margin-bottom: 40px; align-items: flex-end; padding: 24px 28px; border: 1px solid var(--border); background: var(--bg2); }
+  .ctrl { display: flex; flex-direction: column; gap: 8px; }
+  .ctrl-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; }
+  .ctrl-row { display: flex; align-items: center; gap: 10px; }
+  .ctrl-val { font-size: 13px; color: var(--accent); min-width: 44px; }
+  input[type=range] { -webkit-appearance: none; width: 120px; height: 2px; background: var(--border-b); outline: none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; background: var(--accent); border-radius: 50%; cursor: pointer; }
+  .run-btn { font-family: var(--mono); font-size: 12px; padding: 9px 20px; background: var(--accent); color: #0a0a0a; border: none; cursor: pointer; font-weight: 700; letter-spacing: 0.05em; transition: opacity 0.2s; }
+  .run-btn:hover { opacity: 0.85; }
+
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 32px; }
+  .stat { background: var(--bg2); border: 1px solid var(--border); padding: 18px 20px; }
+  .stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; }
+  .stat-num { font-family: var(--sans); font-size: 28px; font-weight: 800; }
+  .stat-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  .chart-section { margin-bottom: 32px; }
+  .chart-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 12px; }
+  .chart-wrap { position: relative; width: 100%; height: 300px; border: 1px solid var(--border); background: var(--bg2); padding: 12px; }
+
+  .legend { display: flex; gap: 24px; margin-bottom: 20px; }
+  .legend-item { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--muted); }
+  .legend-sq { width: 10px; height: 10px; border-radius: 2px; }
+
+  table { width: 100%; border-collapse: collapse; }
+  thead th { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; padding: 10px 14px; border-bottom: 1px solid var(--border); text-align: left; font-weight: 500; }
+  tbody td { padding: 14px; border-bottom: 1px solid var(--border); font-size: 12px; }
+  tbody tr:last-child td { border-bottom: none; }
+  .badge { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; padding: 3px 10px; border: 1px solid; letter-spacing: 0.06em; }
+  .b-bull { border-color: #639922; color: #639922; }
+  .b-bear { border-color: #E24B4A; color: #E24B4A; }
+  .b-vol  { border-color: #EF9F27; color: #EF9F27; }
+  .pos { color: #639922; } .neg { color: #E24B4A; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="h-title">Market Regime Detection <span>Engine</span></div>
+  <div class="h-meta">Hidden Markov Model &nbsp;·&nbsp; <b>Manit Bhasin</b></div>
+</header>
+
+<main>
+  <div class="controls">
+    <div class="ctrl">
+      <div class="ctrl-label">Trading Days</div>
+      <div class="ctrl-row">
+        <input type="range" min="120" max="504" step="1" value="252" id="days" oninput="document.getElementById('days-v').textContent=this.value">
+        <span class="ctrl-val" id="days-v">252</span>
+      </div>
+    </div>
+    <div class="ctrl">
+      <div class="ctrl-label">Volatility Scale</div>
+      <div class="ctrl-row">
+        <input type="range" min="5" max="40" step="1" value="15" id="vol" oninput="document.getElementById('vol-v').textContent=this.value+'%'">
+        <span class="ctrl-val" id="vol-v">15%</span>
+      </div>
+    </div>
+    <div class="ctrl">
+      <div class="ctrl-label">Random Seed</div>
+      <div class="ctrl-row">
+        <input type="range" min="1" max="99" step="1" value="42" id="seed" oninput="document.getElementById('seed-v').textContent=this.value">
+        <span class="ctrl-val" id="seed-v">42</span>
+      </div>
+    </div>
+    <button class="run-btn" onclick="run()">↻ Re-run</button>
+  </div>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="chart-section">
+    <div class="chart-label">Price path by regime</div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-sq" style="background:#639922"></div>Bull</div>
+      <div class="legend-item"><div class="legend-sq" style="background:#E24B4A"></div>Bear</div>
+      <div class="legend-item"><div class="legend-sq" style="background:#EF9F27"></div>High Volatility</div>
+    </div>
+    <div class="chart-wrap"><canvas id="chart"></canvas></div>
+  </div>
+
+  <div class="chart-label" style="margin-bottom:12px">Regime statistics</div>
+  <table>
+    <thead><tr><th>Regime</th><th>Mean Return (daily)</th><th>Ann. Volatility</th><th>Days</th><th>Share</th></tr></thead>
+    <tbody id="tbl"></tbody>
+  </table>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+let chartInst = null;
+
+function seededRand(seed) {
+  let s = seed % 2147483647;
+  if (s <= 0) s += 2147483646;
+  return () => { s = s * 16807 % 2147483647; return (s - 1) / 2147483646; };
+}
+
+function boxMuller(rng) {
+  return Math.sqrt(-2 * Math.log(rng() + 1e-10)) * Math.cos(2 * Math.PI * rng());
+}
+
+function run() {
+  const days = parseInt(document.getElementById('days').value);
+  const volScale = parseInt(document.getElementById('vol').value) / 100;
+  const seed = parseInt(document.getElementById('seed').value);
+  const rng = seededRand(seed * 997 + 13);
+
+  const defs = [
+    { name: 'Bull',     mu: 0.0008,  sig: 0.010, color: '#639922' },
+    { name: 'Bear',     mu: -0.0006, sig: 0.015, color: '#E24B4A' },
+    { name: 'Volatile', mu: 0.0002,  sig: 0.030, color: '#EF9F27' },
+  ];
+  const trans = [[0.95,0.03,0.02],[0.04,0.93,0.03],[0.05,0.05,0.90]];
+
+  let regime = 0;
+  const regimes = [], prices = [100], returns = [];
+
+  for (let i = 0; i < days; i++) {
+    const r = rng(); let cum = 0;
+    for (let j = 0; j < 3; j++) { cum += trans[regime][j]; if (r < cum) { regime = j; break; } }
+    regimes.push(regime);
+    const ret = defs[regime].mu + defs[regime].sig * (volScale / 0.15) * boxMuller(rng);
+    returns.push(ret);
+    prices.push(prices[prices.length - 1] * Math.exp(ret));
+  }
+
+  const labels = Array.from({length: days}, (_, i) => {
+    const d = new Date(2024, 0, 1); d.setDate(d.getDate() + i);
+    return d.toISOString().slice(0,10);
+  });
+
+  const counts = [0,0,0], rets = [[],[],[]];
+  regimes.forEach((r,i) => { counts[r]++; rets[r].push(returns[i]); });
+  const means = rets.map(a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : 0);
+  const vols = rets.map((a,r) => {
+    if (!a.length) return 0;
+    const m = means[r];
+    return Math.sqrt(a.reduce((x,y)=>x+(y-m)**2,0)/a.length * 252);
+  });
+
+  if (chartInst) chartInst.destroy();
+  chartInst = new Chart(document.getElementById('chart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { data: prices.slice(0,days), borderColor: 'rgba(180,180,160,0.2)', borderWidth: 1, pointRadius: 0, showLine: true, fill: false, tension: 0.3, order: 10 },
+        ...defs.map((d,ri) => ({
+          label: d.name,
+          data: prices.slice(0,days).map((p,i) => regimes[i]===ri ? p : null),
+          backgroundColor: d.color, borderColor: d.color,
+          pointRadius: 2.5, pointHoverRadius: 5, showLine: false,
+        }))
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 500 },
+      plugins: { legend: { display: false }, tooltip: { filter: i => i.dataset.label !== undefined, callbacks: { label: c => c.dataset.label + ': ' + c.parsed.y.toFixed(2) } } },
+      scales: {
+        x: { ticks: { maxTicksLimit: 8, font: { size: 10, family: 'JetBrains Mono' }, color: '#6b6a65', autoSkip: true }, grid: { color: 'rgba(255,255,255,0.04)' }, border: { color: 'rgba(255,255,255,0.1)' } },
+        y: { ticks: { font: { size: 10, family: 'JetBrains Mono' }, color: '#6b6a65', callback: v => v.toFixed(0) }, grid: { color: 'rgba(255,255,255,0.04)' }, border: { color: 'rgba(255,255,255,0.1)' } }
+      }
+    }
+  });
+
+  document.getElementById('stats').innerHTML = defs.map((d,r) => `
+    <div class="stat">
+      <div class="stat-label"><span class="dot" style="background:${d.color}"></span>${d.name} Regime</div>
+      <div class="stat-num" style="color:${d.color}">${counts[r]}</div>
+      <div class="stat-sub">${((counts[r]/days)*100).toFixed(1)}% of session</div>
+    </div>`).join('');
+
+  const bc = ['b-bull','b-bear','b-vol'];
+  document.getElementById('tbl').innerHTML = defs.map((d,r) => `
+    <tr>
+      <td><span class="badge ${bc[r]}"><span class="dot" style="background:${d.color}"></span>${d.name}</span></td>
+      <td class="${means[r]>=0?'pos':'neg'}">${(means[r]*100).toFixed(4)}%</td>
+      <td>${(vols[r]*100).toFixed(2)}%</td>
+      <td>${counts[r]}</td>
+      <td>${((counts[r]/days)*100).toFixed(1)}%</td>
+    </tr>`).join('');
+}
+run();
+</script>
+</body>
+</html>
